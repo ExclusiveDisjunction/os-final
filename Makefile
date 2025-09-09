@@ -24,11 +24,9 @@ CC = gcc
 # enable extra warnings
 CFLAGS += -Wall
 # treat warnings as errors
-CFLAGS += -Werror
+# CFLAGS += -Werror
 # produce debugging information for use by gdb
 CFLAGS += -ggdb
-CFLAGS += -target
-CFLAGS += x86-64
 
 # uncomment to enable optimizations. improves performance, but may make
 # debugging more difficult
@@ -55,7 +53,7 @@ OBJDUMP := objdump
 ################################################################################
 
 # If the makefile can't find QEMU, specify its path here
-QEMU := /opt/homebrew/bin/qemu-system-x86_64
+QEMU := /usr/bin/qemu-system-x86_64
 
 # try to generate a unique GDB port
 GDBPORT := $(shell expr `id -u` % 5000 + 25000)

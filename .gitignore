@@ -1,5 +1,7 @@
 # Prerequisites
 *.d
+kernel/*.d
+user/*.d
 
 # Object files
 *.o
@@ -53,3 +55,12 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+*.img
+bootother
+initcode
+fs/
+kernel/bootblock
+kernel/kernel
+tools/mkfs
+user/bin/
