@@ -6,8 +6,11 @@
 #include "proc.h"
 #include "sysfunc.h"
 
+// The number of calls made to getpid.
 int getpid_count = 0;
+// The number of systems calls made.
 int syscalls_count = 0;
+// The number of successful system calls made.
 int succ_syscalls_count = 0;
 
 int
@@ -94,15 +97,19 @@ sys_uptime(void)
   return xticks;
 }
 
+// Get the total number of getpid calls.
 int sys_firstpart(void) {
   return getpid_count;
 }
+// Get the total number of system calls made.
 int sys_secondpart(void) {
   return syscalls_count;
 }
+// Get the total number of successful system calls made.
 int sys_thirdpart(void) {
   return succ_syscalls_count;
 }
+// Instructs QEMU to shutdown.
 int sys_shutdown(void) {
   outw(0x604, 0x2000);
   return 0;
