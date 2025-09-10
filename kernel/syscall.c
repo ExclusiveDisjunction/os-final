@@ -118,13 +118,13 @@ void
 syscall(void)
 {
   int num;
-  syscalls_count++;
+  syscalls_count++; //INCREMENT syscalls count for parttwo counter
 
   num = proc->tf->eax;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num] != NULL) {
     proc->tf->eax = syscalls[num]();
     if (proc->tf->eax != -1) {
-      succ_syscalls_count++;
+      succ_syscalls_count++; // represents a successful system call execution, so increment the counter for partthree systemcall.
     }
   } else {
     cprintf("%d %s: unknown sys call %d\n",
