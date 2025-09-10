@@ -1,0 +1,7 @@
+#include "types.h"
+#include "user.h"
+
+int main(int argc, char** argv) {
+    printf(1, "The total number of successful system calls: %d\n", thirdpart());
+    exit();
+}

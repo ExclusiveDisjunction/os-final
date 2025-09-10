@@ -7,6 +7,8 @@
 #include "sysfunc.h"
 
 int getpid_count = 0;
+int syscalls_count = 0;
+int succ_syscalls_count = 0;
 
 int
 sys_fork(void)
@@ -94,4 +96,14 @@ sys_uptime(void)
 
 int sys_firstpart(void) {
   return getpid_count;
+}
+int sys_secondpart(void) {
+  return syscalls_count;
+}
+int sys_thirdpart(void) {
+  return succ_syscalls_count;
+}
+int sys_shutdown(void) {
+  outw(0x604, 0x2000);
+  return 0;
 }

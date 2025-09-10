@@ -24,5 +24,8 @@ int sys_wait(void);
 int sys_write(void);
 int sys_uptime(void);
 int sys_firstpart(void);
+int sys_secondpart(void);
+int sys_thirdpart(void);
+int sys_shutdown(void);
 
 #endif // _SYSFUNC_H_

@@ -26,5 +26,6 @@
 #define SYS_firstpart  22
 #define SYS_secondpart 23
 #define SYS_thirdpart  24
+#define SYS_shutdown 25
 
 #endif // _SYSCALL_H_

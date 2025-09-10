@@ -7,6 +7,9 @@
 #include "syscall.h"
 #include "sysfunc.h"
 
+extern int syscalls_count; //The count for all system calls
+extern int succ_syscalls_count;
+
 // User code makes a system call with INT T_SYSCALL.
 // System call number in %eax.
 // Arguments on the stack, from the user call to the C
@@ -103,7 +106,10 @@ static int (*syscalls[])(void) = {
 [SYS_wait]    sys_wait,
 [SYS_write]   sys_write,
 [SYS_uptime]  sys_uptime,
-[SYS_firstpart] sys_firstpart
+[SYS_firstpart] sys_firstpart,
+[SYS_secondpart] sys_secondpart,
+[SYS_thirdpart] sys_thirdpart,
+[SYS_shutdown] sys_shutdown
 };
 
 // Called on a syscall trap. Checks that the syscall number (passed via eax)
@@ -112,10 +118,14 @@ void
 syscall(void)
 {
   int num;
-  
+  syscalls_count++;
+
   num = proc->tf->eax;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num] != NULL) {
     proc->tf->eax = syscalls[num]();
+    if (proc->tf->eax != -1) {
+      succ_syscalls_count++;
+    }
   } else {
     cprintf("%d %s: unknown sys call %d\n",
             proc->pid, proc->name, num);
