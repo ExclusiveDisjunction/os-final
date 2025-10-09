@@ -5,6 +5,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "sysfunc.h"
+#include "pstat.h"
 
 // The number of calls made to getpid.
 int getpid_count = 0;
@@ -95,6 +96,11 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+int
+boostproc(void){
+	cpu->scheduler.
 }
 
 // Get the total number of getpid calls.
