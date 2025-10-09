@@ -5,6 +5,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "pstat.h"
 
 struct {
   struct spinlock lock;
@@ -67,6 +68,12 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+
+  p->num_ticks = 0;
+  p->wait_ticks = 0;
+  p->creation_time = ticks;
+  p->first_run_time = -1;
+  p->completion_time = 0;
 
   return p;
 }
@@ -261,11 +268,21 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+       if (p->state == RUNNABLE)
+	p->wait_ticks++;
+    }
+
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
+
+      // Mark first run, if applicable
+      if (p->first_run_time < 0) 
+         p->first_run_time = ticks;
+      p->num_ticks++;
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
@@ -443,4 +460,59 @@ procdump(void)
   }
 }
 
+void ps(void) {
+	struct proc* p;
+	cprintf("PID\tState\t\tName\tSize\tParent\n");
+	cprintf("---\t-----\t\t----\t----\t------\n");
 
+	 static char *states[] = {
+  		[UNUSED]    "unused",
+  		[EMBRYO]    "embryo",
+  		[SLEEPING]  "sleep ",
+  		[RUNNABLE]  "runble",
+  		[RUNNING]   "run   ",
+  		[ZOMBIE]    "zombie"
+  	};
+	
+	acquire(&ptable.lock);
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+		if (p->state == UNUSED) 
+			continue;
+
+		cprintf("%d\t%s\t\t%s\t%d\t", p->pid, states[p->state], p->name, p->sz);
+		if (p->parent)
+			cprintf("%d", p->parent->pid);
+		else 
+			cprintf("-");
+		cprintf("\n");
+	}
+	release(&ptable.lock);
+}
+
+int getpinfo(struct pstat* ps) {
+	if (ps == 0) 
+		return -1;
+
+	acquire(&ptable.lock);
+	struct proc* p;
+	int i = 0;
+	for (p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++) {
+		if (p->state == UNUSED) {
+			ps->inuse[i] = 0;
+			continue;
+		}
+		ps->inuse[i] = 1;
+		ps->pid[i] = p->pid;
+		ps->ticks[i] = p->num_ticks;
+		ps->wait_ticks[i] = p->wait_ticks;
+		ps->start_tick[i] = p->creation_time;
+		ps->first_run[i] = p->first_run_time;
+		ps->end_tick[i] = p->completion_time;
+		int j =0;
+		for (; j < 16 && p->name[j]; j++) 
+			ps->name[i][j] = p->name[j];
+		ps->name[i][j] = 0;
+	}
+	release(&ptable.lock);
+	return 0;
+}
