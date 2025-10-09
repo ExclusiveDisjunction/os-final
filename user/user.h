@@ -4,6 +4,7 @@
 enum procstate {UNUSED,EMBRYO,SLEEPING,RUNNABLE,RUNNING,ZOMBIE};
 
 struct stat;
+struct pstat;
 
 // system calls
 int fork(void);
@@ -31,8 +32,9 @@ int firstpart(void);
 int secondpart(void);
 int thirdpart(void);
 int shutdown(void);
-int getprocinfo(struct pstat*)
 int boostproc(void)
+int ps(void);
+int getpinfo(struct pstat*);
 
 // user library functions (ulib.c)
 int stat(char*, struct stat*);

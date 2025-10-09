@@ -120,3 +120,14 @@ int sys_shutdown(void) {
   outw(0x604, 0x2000);
   return 0;
 }
+
+int sys_ps(void) {
+	ps();
+	return 0;
+}
+int sys_getpinfo(void) {
+	struct pstat* ps;
+	if (argptr(0, (void*)&ps, sizeof(struct pstat)) < 0)
+		return -1;
+	return getpinfo(ps);
+}

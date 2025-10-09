@@ -27,5 +27,7 @@ int sys_firstpart(void);
 int sys_secondpart(void);
 int sys_thirdpart(void);
 int sys_shutdown(void);
+int sys_ps(void);
+int sys_getpinfo(void);
 
 #endif // _SYSFUNC_H_

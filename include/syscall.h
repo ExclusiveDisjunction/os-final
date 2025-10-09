@@ -27,7 +27,8 @@
 #define SYS_secondpart 23
 #define SYS_thirdpart  24
 #define SYS_shutdown 25
-#define SYS_getprocinfo 26
-#define SYS_boostproc 27
+#define SYS_ps 26
+#define SYS_getpinfo 27
+#define SYS_boostproc 28
 
 #endif // _SYSCALL_H_
