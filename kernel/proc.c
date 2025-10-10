@@ -283,6 +283,9 @@ scheduler(void)
       if (p->first_run_time < 0) 
          p->first_run_time = ticks;
       p->num_ticks++;
+      // Since we incremented the wait ticks, we need to decrement our selected one.
+      if (p->wait_ticks != 0) 
+	p->wait_ticks--;
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
