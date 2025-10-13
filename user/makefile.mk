@@ -21,7 +21,11 @@ USER_PROGS := \
 	parttwo-test\
 	partthree-test\
 	projectone-test\
-	ps
+	ps\
+	cpubound\
+	iobound\
+	mixed\
+	benchmark
 
 USER_PROGS := $(addprefix user/, $(USER_PROGS))
 
