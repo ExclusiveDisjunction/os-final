@@ -9,7 +9,7 @@ int main(int argc, char *argv[]){
 	}
 	int i,j,x=0;
 	for(i = 0; i < cycles; i++){
-		for(j = 0; j < 120000; j++){
+		for(j = 0; j < 12; j++){
 			x += j;
 			if( (i % 4) == 0){
 				sleep(3);

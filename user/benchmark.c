@@ -7,7 +7,13 @@
 
 static void spawn(char *prog, char *arg){
 	char *argv[3]={prog, arg, 0};
-	if(fork() == 0){
+	int fork_value = fork();
+	if (fork_value < 0) {
+		printf(1, "Unable to fork");
+		exit();
+	}
+
+	else if (fork_value == 0){
 		exec(prog, argv);
 		printf(1, "exec %s failed\n", prog);
 		exit();
@@ -41,11 +47,13 @@ int main(int argc, char *argv[]){
 	int turn_cnt = 0;
 	int busy_ticks = 0;
 	
-	printf(1, "\nFINAL STATS (pid name ticks wait start first end)\n");
-	
+	char name_pretty[16];
+	name_pretty[15] = 0;
+
+	printf(1, "\nFINAL STATS\n");
+	printf(1, "PID\tName           Ticks\tWait\tStart\tFirst\tEnd\t\n");	
 	for(i = 0; i < NPROC; i++){
 		if(ps.inuse[i] && ps.pid[i] > 2){
-			
 			int turnaround;
 			if(ps.end_tick[i] > 0){
 				turnaround = ps.end_tick[i] - ps.start_tick[i];
@@ -61,9 +69,15 @@ int main(int argc, char *argv[]){
 			else{
 				response = end - ps.start_tick[i];
 			}
-			
-			printf(1, "%d %-12s %d %d %d %d %d\n", ps.pid[i], ps.ticks[i], ps.wait_ticks[i],
-					ps.start_tick[i], ps.first_run[i], ps.end_tick[i]);
+		
+			// Perfectionist stuff... Creating a buffer that stores the name to a specific width..
+			memset(name_pretty, ' ', sizeof(char) * 15);
+			int c_i;
+			char* name = ps.name[i];
+			for(c_i = 0; name[c_i]; c_i++) 
+				name_pretty[c_i] = name[c_i]; 
+
+			printf(1, "%d\t%s\t%d\t%d\t%d\t%d\t%d\n", ps.pid[i], name_pretty, ps.ticks[i], ps.wait_ticks[i], ps.start_tick[i], ps.first_run[i], ps.end_tick[i]);
 			
 			if(ps.end_tick[i] > 0){
 				total_turn += turnaround;
