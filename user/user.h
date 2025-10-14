@@ -32,7 +32,6 @@ int firstpart(void);
 int secondpart(void);
 int thirdpart(void);
 int shutdown(void);
-int boostproc(void)
 int ps(void);
 int getpinfo(struct pstat*);
 

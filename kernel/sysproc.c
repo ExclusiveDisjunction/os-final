@@ -98,11 +98,6 @@ sys_uptime(void)
   return xticks;
 }
 
-int
-boostproc(void){
-	cpu->scheduler.
-}
-
 // Get the total number of getpid calls.
 int sys_firstpart(void) {
   return getpid_count;

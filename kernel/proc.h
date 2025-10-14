@@ -1,5 +1,14 @@
 #ifndef _PROC_H_
 #define _PROC_H_
+
+#include "types.h"
+#include "param.h"
+#include "mmu.h"
+#include "x86.h"    
+
+#include "spinlock.h"
+#include "queue.h"
+
 // Segments in proc->gdt.
 // Also known to bootasm.S and trapasm.S
 #define SEG_KCODE 1  // kernel code
@@ -9,6 +18,11 @@
 #define SEG_UDATA 5  // user data+stack
 #define SEG_TSS   6  // this process's task state
 #define NSEGS     7
+
+#define QUEUE_NUM 4
+// Priority: 3 (highest) - 0 (lowest)
+#define HIGHEST_PRIORITY 3
+#define LOWEST_PRIORITY  0
 
 // Per-CPU state
 struct cpu {
@@ -58,6 +72,13 @@ struct context {
 };
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+static const int queue_quantum[QUEUE_NUM] = {8, 16, 32, 0};  // ticks (1 tick = quantum of 10ms)
+// periodic priority boost period (Rule 5)
+static const int PRIORITY_BOOST_TICKS = 200; // tune S as required
+
+extern const int rr_slice[QUEUE_NUM];
+extern const int queue_time_slice[QUEUE_NUM];
+
 
 // Per-process state
 struct proc {
@@ -80,7 +101,30 @@ struct proc {
   int creation_time;
   int first_run_time;
   int completion_time;
+
+  int in_queue; // If this process is already in another queue
+  int priority; // Current priority level (0-3)
+  int ticks[4]; // Ticks accumulated at each priority
+  int p_wait_ticks[4]; // Ticks waited at each priority
+  int timeslice_left; // Remaining ticks in current time slice
+  int rr_slice_left; // Remaining ticks in current RR turn
 };
+
+// Global process table
+// extern struct {
+//   struct spinlock lock;
+//   struct proc proc[NPROC];
+//   Queue queues[QUEUE_NUM];
+// } ptable;
+
+struct ptable_t {
+    struct spinlock lock;
+    struct proc proc[NPROC];
+    Queue queues[QUEUE_NUM];
+};
+
+extern struct ptable_t ptable;   // declaration only
+
 
 // Process memory is laid out contiguously, low addresses first:
 //   text

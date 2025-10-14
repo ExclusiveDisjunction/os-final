@@ -12,6 +12,13 @@ struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
+// Boost thresholds (10x time slice)
+static int boost_wait_threshold[QUEUE_NUM] = {
+  [0] = 640,
+  [1] = 320,
+  [2] = 160,
+  [3] = 80
+};
 
 void
 tvinit(void)
@@ -46,12 +53,50 @@ trap(struct trapframe *tf)
 
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
-    if(cpu->id == 0){
-      acquire(&tickslock);
-      ticks++;
-      wakeup(&ticks);
-      release(&tickslock);
+    acquire(&tickslock);
+    ticks++;
+    wakeup(&ticks);
+    release(&tickslock);
+
+    // Update running process accounting (do NOT call yield() here).
+    // We'll let the unconditional preemption later in trap() handle the actual context switch.
+    if (proc) {
+      // accumulate CPU used
+      proc->num_ticks++;
+      if (proc->priority >= 0 && proc->priority < QUEUE_NUM) {
+        proc->ticks[proc->priority]++;
+      }
+
+      // decrement both the overall timeslice and per-RR slice
+      if (proc->timeslice_left > 0)
+        proc->timeslice_left--;
+      if (proc->rr_slice_left > 0)
+        proc->rr_slice_left--;
     }
+
+    // Update wait times for all RUNNABLE processes (anti-starve tracking, aka boosting)
+    acquire(&ptable.lock);
+    for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {      
+      if (p->state == RUNNABLE) {
+        if (p->priority >= 0 && p->priority < QUEUE_NUM){
+          p->p_wait_ticks[p->priority]++;
+        }
+        
+
+        // Check for boost (Rule: waited 10x slice)
+        if (p->p_wait_ticks[p->priority] >= boost_wait_threshold[p->priority] &&
+            p->priority < HIGHEST_PRIORITY) {
+          p->priority++;
+          p->p_wait_ticks[p->priority] = 0;
+          p->timeslice_left = queue_time_slice[p->priority];
+          p->rr_slice_left = rr_slice[p->priority];
+          cprintf("%s got boosted up one level", p->name);
+        }
+      }
+    }
+
+    release(&ptable.lock);
+
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE:

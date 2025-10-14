@@ -1,26 +1,28 @@
 #ifndef _QUEUE_H_
 #define _QUEUE_H_
 
-#include <stdbool.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include "types.h"
+#include "param.h"
 
 struct proc;
 
+#define MAX_QUEUE_SIZE NPROC
+
 typedef struct {
-    struct proc** process_queue;  // dynamic array of pointers
+    struct proc* process_queue[MAX_QUEUE_SIZE];
     int front;
     int rear;
     int size;
     int capacity;
+    int quantum;
 } Queue;
 
-Queue* initializeQueue(int capacity);
-bool isEmpty(Queue* q);
-bool isFull(Queue* q);
-void enqueue(Queue* q, struct proc* process);
+// Kernel-safe prototypes (no malloc/free)
+void initializeQueue(Queue* q, int capacity, int quantum);
+int isEmpty(Queue* q);
+int isFull(Queue* q);
+void enqueue(Queue* q, struct proc* p);
 struct proc* dequeue(Queue* q);
 void printQueue(Queue* q);
-void freeQueue(Queue* q);
 
-#endif // _QUEUE_H_
+#endif

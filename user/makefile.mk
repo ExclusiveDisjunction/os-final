@@ -21,6 +21,11 @@ USER_PROGS := \
 	parttwo-test\
 	partthree-test\
 	projectone-test\
+	hog\
+	sleeper\
+	test_boost\
+	test_mlfq\
+	test_print\
 	ps
 
 USER_PROGS := $(addprefix user/, $(USER_PROGS))

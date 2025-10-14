@@ -6,11 +6,10 @@
 #include "proc.h"
 #include "spinlock.h"
 #include "pstat.h"
+#include "queue.h"
 
-struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
-} ptable;
+struct ptable_t ptable;
+
 
 static struct proc *initproc;
 
@@ -20,10 +19,50 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+
+// Total time slices per priority level (time before demotion)
+const int queue_time_slice[QUEUE_NUM] = {
+  // [0] = 8,  // effectively infinite (runs until completion)
+  [0] = 9999999,  // effectively infinite (runs until completion)
+  [1] = 32,
+  [2] = 16,
+  [3] = 8
+};
+
+
+// RR (round-robin) turn slice per level
+const int rr_slice[QUEUE_NUM] = {
+  [0] = 64,
+  [1] = 4,
+  [2] = 2,
+  [3] = 1
+};
+
+// must be called with ptable.lock held
+static void enqueue_proc(int qidx, struct proc *p) {
+  if (!p || qidx < 0 || qidx >= QUEUE_NUM) return;
+  if (p->in_queue) return;  // already queued
+  enqueue(&ptable.queues[qidx], p);
+  p->in_queue = 1;
+}
+
+// must be called with ptable.lock held
+static struct proc* dequeue_proc(int qidx) {
+  if (qidx < 0 || qidx >= QUEUE_NUM) return 0;
+  struct proc *p = dequeue(&ptable.queues[qidx]);
+  if (p) p->in_queue = 0;
+  return p;
+}
+
 void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+
+  for (int i = 0; i < QUEUE_NUM; i++) {
+    initializeQueue(&ptable.queues[i], NPROC, queue_quantum[i]);
+  }
+ 
 }
 
 // Look in the process table for an UNUSED proc.
@@ -74,7 +113,17 @@ found:
   p->creation_time = ticks;
   p->first_run_time = -1;
   p->completion_time = 0;
-
+  
+  p->priority = HIGHEST_PRIORITY;
+  // Initialize accumlated and wait ticks arrays to 0
+  int i;
+  for(i = 0; i < QUEUE_NUM; i++){
+    p->ticks[i] = 0;
+    p->p_wait_ticks[i] = 0;
+  }
+  p->timeslice_left = queue_time_slice[HIGHEST_PRIORITY];
+  p->rr_slice_left = rr_slice[HIGHEST_PRIORITY];
+  p->in_queue = 0;
   return p;
 }
 
@@ -105,6 +154,8 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  // Add the new process to the highest queue
+  enqueue_proc(HIGHEST_PRIORITY, p);  
   release(&ptable.lock);
 }
 
@@ -163,6 +214,18 @@ fork(void)
   pid = np->pid;
   np->state = RUNNABLE;
   safestrcpy(np->name, proc->name, sizeof(proc->name));
+
+  // ENQUEUE the newly-runnable child into its MLFQ queue so scheduler can pick it.
+  acquire(&ptable.lock);
+  // ensure child has highest-priority on creation (if allocproc didn't already set)
+  if (np->priority < 0 || np->priority >= QUEUE_NUM)
+    np->priority = HIGHEST_PRIORITY;
+  // make sure timeslice/rr are initialized (in case allocproc missed it)
+  np->timeslice_left = queue_time_slice[np->priority];
+  np->rr_slice_left = rr_slice[np->priority];
+  enqueue_proc(np->priority, np);
+  release(&ptable.lock);
+
   return pid;
 }
 
@@ -263,40 +326,80 @@ void
 scheduler(void)
 {
   struct proc *p;
+  int q; // target level queue
 
   for(;;){
     // Enable interrupts on this processor.
     sti();
-
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-       if (p->state == RUNNABLE)
-	p->wait_ticks++;
-    }
-
-    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
 
-      // Mark first run, if applicable
-      if (p->first_run_time < 0) 
-         p->first_run_time = ticks;
-      p->num_ticks++;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
+    // Update wait ticks
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if (p->state == RUNNABLE) p->wait_ticks++;
     }
+    release(&ptable.lock);
+
+
+    acquire(&ptable.lock);
+    // Pick highest non-empty queue (Rule 1)
+    for (q = HIGHEST_PRIORITY; q >= LOWEST_PRIORITY; q--) {
+      if (!isEmpty(&ptable.queues[q]))
+        break;
+    }
+
+    if (q < LOWEST_PRIORITY || q > HIGHEST_PRIORITY) {
+      // No runnable process
+      release(&ptable.lock);
+      continue;
+    }
+
+    
+    // pick next process in RR from queue q
+    p = dequeue_proc(q);
+    if (!p) {
+      release(&ptable.lock);
+      continue;
+    }
+
+    // cprintf("scheduler: switching to pid %d name=%s prio=%d timeslice=%d rr=%d\n",
+        // p->pid, p->name, p->priority, p->timeslice_left, p->rr_slice_left);
+
+
+    // set the first time process was run
+    if (p->first_run_time < 0){
+      p->first_run_time = ticks;
+    }
+
+    proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
+
+    swtch(&cpu->scheduler, proc->context);
+
+  
+    // Handle demotion (Rule 4)
+    if (p->state == RUNNABLE) {
+      // Check for demotion: fully consumed its time slice
+      // cprintf("p_name=%s, timeslice_left=%d, priority=%d\n",
+        // p->name, p->timeslice_left, p->priority);
+
+      if (p->timeslice_left <= 0 && p->priority > LOWEST_PRIORITY) {
+        p->priority--;
+        p->timeslice_left = queue_time_slice[p->priority];
+        p->rr_slice_left = rr_slice[p->priority];
+      }
+
+      // If the process exhausted its RR turn, reset rr_slice_left for its next turn.
+      // This prevents immediate re-preemption loops.
+      if (p->rr_slice_left <= 0) {
+        p->rr_slice_left = rr_slice[p->priority];
+      }
+
+      enqueue_proc(p->priority, p);
+    }
+
+    // else if SLEEPING, ZOMBIE, etc. do nothing (wakeups will re-enqueue)
+    proc = 0;
     release(&ptable.lock);
 
   }
@@ -388,8 +491,11 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+    if(p->state == SLEEPING && p->chan == chan){
       p->state = RUNNABLE;
+      // enqueue at current priority if not already queued
+      enqueue_proc(p->priority, p);
+    }
 }
 
 // Wake up all processes sleeping on chan.
