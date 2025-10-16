@@ -12,6 +12,13 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
+struct {
+  struct spinlock lock;
+  struct proc_profile_kernel* info;
+  size_t count;
+  size_t capacity;
+} profile_info;
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -20,10 +27,43 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+int profile_setup(size_t count) {
+  acquire(&profile_info.lock);
+
+  if (profile_info.info && profile_info.capacity) //Already opened
+    return -1;
+
+  profile_info = malloc(sizeof(struct proc_profile_kernel) * count);
+  memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * count);
+  profile_info.capacity = count;
+  profile_info.count = 0;
+
+  release(&profile_info.lock);
+  return 0;
+}
+int profile_release() {
+  acquire(&profile_info.lock);
+  if (!profile_info.info && !profile_info.capacity) //Already released
+    return -1;
+
+  free(profile_info.info);
+  profile_info.info = 0;
+  profile_info.capacity = 0;
+  profile_info.count = 0;
+
+  release(&profile_info.lock);
+  return 0;
+}
+
 void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+
+  initlock(&profile_info.lock, "profile_info");  
+  profile_info.info = 0;
+  profile_info.count = 0;
+  profile_info.capacity = 0;
 }
 
 // Look in the process table for an UNUSED proc.
@@ -68,13 +108,27 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  
+  // Now, if profiling is active, and there is space to store, we will store a profiling information session.
+  acquire(&profile_info.lock);
+  if (profile_info.info && profile_info.capacity && profile_info.count + 1 < profile_info.capacity) {
+    struct proc_profile_kernel* new_info = &profile_info.info[profile_info.count];
+    profile_info.count++;
 
-  p->num_ticks = 0;
-  p->wait_ticks = 0;
-  p->creation_time = ticks;
-  p->first_run_time = -1;
-  p->completion_time = 0;
+    new_info->pid = p->pid;
+    new_info->parent_pid = p->parent ? p->parent->pid : 0;
+    strcpy(new_info->name, p->name);
 
+    new_info->num_ticks = 0;
+    new_info->wait_ticks = 0;
+    new_info->creation_time = ticks;
+    new_info->first_run_time = -1;
+    new_info->completion_time = 0;
+  }
+  else 
+    p->profiling_index = -1;
+
+  release(&profile_info.lock);
   return p;
 }
 
@@ -205,7 +259,14 @@ exit(void)
 
   // Jump into the scheduler, never to return.
   proc->state = ZOMBIE;
-  proc->completion_time = ticks;
+  
+  acquire(&profile_info.lock);
+  if (profile_info.info && profile_info.capacity) {
+    if (proc->profiling_index >= 0 && proc->profiling_index < profile_info.count)
+      profile_info[proc->profiling_index].completion_time = ticks;  
+  }
+  release(&profile_info.lock);
+
   sched();
   panic("zombie exit");
 }
@@ -265,28 +326,40 @@ scheduler(void)
 {
   struct proc *p;
 
-  for(;;){
+  while (1) {
     // Enable interrupts on this processor.
     sti();
 
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-       if (p->state == RUNNABLE)
-	p->wait_ticks++;
+    acquire(&profile_info.lock);
+    char profile_enabled = profile_info.info && profile_info.capacity;
+    if (profile_enabled) {
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+         if (p->state == RUNNABLE && p->profiling_index >= 0 && p->profiling_index < profile_info.count)
+          profile_info.info[p->profiling_index].wait_ticks++;
+      }
     }
+    release(&profile_info.lock);
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
       if(p->state != RUNNABLE)
         continue;
 
       // Mark first run, if applicable
-      if (p->first_run_time < 0) 
-         p->first_run_time = ticks;
-      p->num_ticks++;
-      // Since we incremented the wait ticks, we need to decrement our selected one.
-      if (p->wait_ticks != 0) 
-	p->wait_ticks--;
+      acquire(&profile_info.lock);
+      if (profile_info.info && profile_info.capacity && p->profiling_index >= 0 && p->profiling_index < profile_info.count) {
+        int index = p->profiling_index;
+        struct proc_profile_kernel* target_info = &profile_info[index];
+        if (target_info->first_run_time < 0)
+          target_info->first_run_time = ticks;
+
+        target_info->num_ticks++;
+
+        if (target_info->wait_ticks != 0) //Make sure there are no double counts
+          target_info->wait_ticks--;
+      }
+      release(&profile_info.lock);
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
