@@ -75,6 +75,15 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 
+  int profiling_index;         // The index in the global profile info. If no such index exists, it will be -1. Note, it may not always be valid.
+};
+
+// Process profiling state
+struct proc_profile_kernel {
+  int pid;
+  int parent_pid;
+  char name[16];
+
   int num_ticks;
   int wait_ticks;
   int creation_time;
