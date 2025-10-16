@@ -17,10 +17,6 @@ USER_PROGS := \
 	usertests\
 	wc\
 	zombie\
-	partone-test\
-	parttwo-test\
-	partthree-test\
-	projectone-test\
 	ps\
 	cpubound\
 	iobound\

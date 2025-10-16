@@ -126,3 +126,18 @@ int sys_getpinfo(void) {
 		return -1;
 	return getpinfo(ps);
 }
+
+int sys_pinfostart(void) {
+	int count;
+	if (argptr(0, (void*)&count, sizeof(int)) < 0)
+		return -1;
+	
+	panic("Unimplemented");
+	return 1;
+}
+int sys_pinfoend(void) {
+	
+	panic("Unimplemented");
+	return 1;
+}
+

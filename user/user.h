@@ -32,6 +32,8 @@ int thirdpart(void);
 int shutdown(void);
 int ps(void);
 int getpinfo(struct pstat*);
+int pinfostart(int);
+int pinfoend();
 
 // user library functions (ulib.c)
 int stat(char*, struct stat*);
