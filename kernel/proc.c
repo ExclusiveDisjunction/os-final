@@ -570,26 +570,39 @@ int getpinfo(struct pstat* ps) {
 	if (ps == 0) 
 		return -1;
 
+	int ret;
+
 	acquire(&ptable.lock);
-	struct proc* p;
-	int i = 0;
-	for (p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++) {
-		if (p->state == UNUSED) {
-			ps->inuse[i] = 0;
-			continue;
+	acquire(&profile_info.lock);	
+	if (profile_info.info && profile_info.capacity && profile_info.count) {
+		struct proc* p;
+		int i = 0;
+		for (p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++) {
+			if (p->state == UNUSED || p->profiling_index < 0 || p->profiling_index > profile_info.count) {
+				ps->inuse[i] = 0;
+				continue;
+			}
+			struct proc_profile_kernel* profile = &profile_info.info[p->profiling_index];
+			ps->inuse[i] = 1;
+			ps->pid[i] = profile->pid;
+			ps->ticks[i] = profile->num_ticks;
+			ps->wait_ticks[i] = profile->wait_ticks;
+			ps->start_tick[i] = profile->creation_time;
+			ps->first_run[i] = profile->first_run_time;
+			ps->end_tick[i] = profile->completion_time;
+			int j =0;
+			for (; j < 16 && profile->name[j]; j++) 
+				ps->name[i][j] = p->name[j];
+			ps->name[i][j] = 0;
 		}
-		ps->inuse[i] = 1;
-		ps->pid[i] = p->pid;
-		ps->ticks[i] = p->num_ticks;
-		ps->wait_ticks[i] = p->wait_ticks;
-		ps->start_tick[i] = p->creation_time;
-		ps->first_run[i] = p->first_run_time;
-		ps->end_tick[i] = p->completion_time;
-		int j =0;
-		for (; j < 16 && p->name[j]; j++) 
-			ps->name[i][j] = p->name[j];
-		ps->name[i][j] = 0;
+		ret = 0;
+	}
+	else {
+		memset(ps, 0, sizeof(struct pstat));
+		return -1;
 	}
 	release(&ptable.lock);
+	release(&profile_info.lock);
+
 	return 0;
 }

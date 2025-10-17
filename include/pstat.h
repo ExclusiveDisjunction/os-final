@@ -11,6 +11,8 @@ struct pstat {
 	int first_run[NPROC];
 	int end_tick[NPROC];
 	char name[NPROC][16];
+
+	size_t count;
 };
 
 #endif
