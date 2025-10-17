@@ -10,6 +10,9 @@
 #define SEG_TSS   6  // this process's task state
 #define NSEGS     7
 
+#include "spinlock.h"
+
+
 // Per-CPU state
 struct cpu {
   uchar id;                    // Local APIC ID; index into cpus[] below
@@ -89,6 +92,13 @@ struct proc_profile_kernel {
   int creation_time;
   int first_run_time;
   int completion_time;
+};
+
+struct profile_info_struct {
+  struct spinlock lock;
+  struct proc_profile_kernel info[NPROC];
+  int count;
+  short active;
 };
 
 // Process profiling related functions

@@ -12,12 +12,7 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
-struct {
-  struct spinlock lock;
-  struct proc_profile_kernel info[NPROC];
-  int count;
-  short active;
-} profile_info;
+struct profile_info_struct profile_info;
 
 static struct proc *initproc;
 
@@ -112,7 +107,6 @@ found:
   if (profile_info.active && profile_info.count + 1 < NPROC) {
     struct proc_profile_kernel* new_info = &profile_info.info[profile_info.count];
     p->profiling_index = profile_info.count; 
-    cprintf("KERNEL: Profiling is active, registering the profile @ %d\n", p->profiling_index);
 
     profile_info.count++;
 
@@ -267,7 +261,6 @@ exit(void)
   acquire(&profile_info.lock);
   if (profile_info.active) {
     if (proc->profiling_index >= 0 && proc->profiling_index < profile_info.count) {
-     	cprintf("KERNEL: Process is determiend to be profiled (@ %d), recording exit\n", proc->profiling_index);
          profile_info.info[proc->profiling_index].completion_time = ticks;  
     }
   }
@@ -575,7 +568,6 @@ int getpinfo(struct pstat* ps) {
 
 	acquire(&profile_info.lock);	
 	if (profile_info.active && profile_info.count) {
-		cprintf("KERNEL: getpinfo determiend that profiling is active & the count is %d\n", profile_info.count);
 		int i = 0;
 		for (; i < profile_info.count; i++) {
 			struct proc_profile_kernel* profile = &profile_info.info[i];
@@ -589,16 +581,14 @@ int getpinfo(struct pstat* ps) {
 			int j =0;
 			for (; j < 16 && profile->name[j]; j++) 
 				ps->name[i][j] = profile->name[j];
-			ps->name[i][j] = 0;
 
+			ps->name[i][j] = 0;
+			
 			ps->count++;
 		}
 		ret = 0;
-
-		cprintf("The output has a count of %d\n", ps->count);
 	}
 	else {
-		cprintf("No profiling is active\n");
 		memset(ps, 0, sizeof(struct pstat));
 		ret = -1;
 	}

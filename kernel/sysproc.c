@@ -126,7 +126,6 @@ int sys_getpinfo(void) {
 		return -1;
 
 	int result = getpinfo(ps);
-	cprintf("KERNEL: Obtained count %d\n", ps->count);
 	profile_release();
 	return result;
 }

@@ -43,10 +43,6 @@ int main(int argc, char *argv[]){
 		exit();
 	}
 
-	if (info.count > 0) {
-		printf(1, "Count: %d\nFirst row raw: %d %s %d", info.count, info.inuse[0], info.name[0], info.pid[0]);
-	}	
-
 	int total_resp = 0;
 	int resp_cnt = 0;
 	int total_turn = 0;
