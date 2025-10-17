@@ -91,6 +91,10 @@ struct proc_profile_kernel {
   int completion_time;
 };
 
+// Process profiling related functions
+int profile_setup();
+int profile_release();
+
 // Process memory is laid out contiguously, low addresses first:
 //   text
 //   original data and bss

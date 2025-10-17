@@ -12,7 +12,7 @@ struct pstat {
 	int end_tick[NPROC];
 	char name[NPROC][16];
 
-	size_t count;
+	int count;
 };
 
 #endif

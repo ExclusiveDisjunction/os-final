@@ -14,9 +14,9 @@ struct {
 
 struct {
   struct spinlock lock;
-  struct proc_profile_kernel* info;
-  size_t count;
-  size_t capacity;
+  struct proc_profile_kernel info[NPROC];
+  int count;
+  short active;
 } profile_info;
 
 static struct proc *initproc;
@@ -27,29 +27,27 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
-int profile_setup(size_t count) {
+int profile_setup() {
   acquire(&profile_info.lock);
 
-  if (profile_info.info && profile_info.capacity) //Already opened
+  if (profile_info.active) //Already opened
     return -1;
 
-  profile_info = malloc(sizeof(struct proc_profile_kernel) * count);
-  memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * count);
-  profile_info.capacity = count;
+  memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
   profile_info.count = 0;
+  profile_info.active = 1;
 
   release(&profile_info.lock);
   return 0;
 }
 int profile_release() {
   acquire(&profile_info.lock);
-  if (!profile_info.info && !profile_info.capacity) //Already released
+  if (!profile_info.active) //Already released
     return -1;
 
-  free(profile_info.info);
-  profile_info.info = 0;
-  profile_info.capacity = 0;
+  memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
   profile_info.count = 0;
+  profile_info.active = 0;
 
   release(&profile_info.lock);
   return 0;
@@ -61,9 +59,9 @@ pinit(void)
   initlock(&ptable.lock, "ptable");
 
   initlock(&profile_info.lock, "profile_info");  
-  profile_info.info = 0;
   profile_info.count = 0;
-  profile_info.capacity = 0;
+  profile_info.active = 0;
+  memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
 }
 
 // Look in the process table for an UNUSED proc.
@@ -111,22 +109,28 @@ found:
   
   // Now, if profiling is active, and there is space to store, we will store a profiling information session.
   acquire(&profile_info.lock);
-  if (profile_info.info && profile_info.capacity && profile_info.count + 1 < profile_info.capacity) {
+  if (profile_info.active && profile_info.count + 1 < NPROC) {
     struct proc_profile_kernel* new_info = &profile_info.info[profile_info.count];
+    p->profiling_index = profile_info.count; 
+    cprintf("KERNEL: Profiling is active, registering the profile @ %d\n", p->profiling_index);
+
     profile_info.count++;
 
     new_info->pid = p->pid;
     new_info->parent_pid = p->parent ? p->parent->pid : 0;
-    strcpy(new_info->name, p->name);
+
+    int j =0;
+    for (; j < 16; j++) 
+      new_info->name[j] = p->name[j];
+    new_info->name[j] = 0;
 
     new_info->num_ticks = 0;
     new_info->wait_ticks = 0;
     new_info->creation_time = ticks;
     new_info->first_run_time = -1;
-    new_info->completion_time = 0;
-  }
-  else 
-    p->profiling_index = -1;
+    new_info->completion_time = 0; 
+ }
+  else { p->profiling_index = -1; }
 
   release(&profile_info.lock);
   return p;
@@ -261,9 +265,11 @@ exit(void)
   proc->state = ZOMBIE;
   
   acquire(&profile_info.lock);
-  if (profile_info.info && profile_info.capacity) {
-    if (proc->profiling_index >= 0 && proc->profiling_index < profile_info.count)
-      profile_info[proc->profiling_index].completion_time = ticks;  
+  if (profile_info.active) {
+    if (proc->profiling_index >= 0 && proc->profiling_index < profile_info.count) {
+     	cprintf("KERNEL: Process is determiend to be profiled (@ %d), recording exit\n", proc->profiling_index);
+         profile_info.info[proc->profiling_index].completion_time = ticks;  
+    }
   }
   release(&profile_info.lock);
 
@@ -331,9 +337,8 @@ scheduler(void)
     sti();
 
     acquire(&profile_info.lock);
-    char profile_enabled = profile_info.info && profile_info.capacity;
-    if (profile_enabled) {
-      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (profile_info.active) {  
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
          if (p->state == RUNNABLE && p->profiling_index >= 0 && p->profiling_index < profile_info.count)
           profile_info.info[p->profiling_index].wait_ticks++;
       }
@@ -348,16 +353,12 @@ scheduler(void)
 
       // Mark first run, if applicable
       acquire(&profile_info.lock);
-      if (profile_info.info && profile_info.capacity && p->profiling_index >= 0 && p->profiling_index < profile_info.count) {
-        int index = p->profiling_index;
-        struct proc_profile_kernel* target_info = &profile_info[index];
+      if (profile_info.active && p->profiling_index >= 0 && p->profiling_index < profile_info.count) {
+        struct proc_profile_kernel* target_info = &profile_info.info[p->profiling_index];
         if (target_info->first_run_time < 0)
           target_info->first_run_time = ticks;
 
         target_info->num_ticks++;
-
-        if (target_info->wait_ticks != 0) //Make sure there are no double counts
-          target_info->wait_ticks--;
       }
       release(&profile_info.lock);
 
@@ -572,17 +573,12 @@ int getpinfo(struct pstat* ps) {
 
 	int ret;
 
-	acquire(&ptable.lock);
 	acquire(&profile_info.lock);	
-	if (profile_info.info && profile_info.capacity && profile_info.count) {
-		struct proc* p;
+	if (profile_info.active && profile_info.count) {
+		cprintf("KERNEL: getpinfo determiend that profiling is active & the count is %d\n", profile_info.count);
 		int i = 0;
-		for (p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++) {
-			if (p->state == UNUSED || p->profiling_index < 0 || p->profiling_index > profile_info.count) {
-				ps->inuse[i] = 0;
-				continue;
-			}
-			struct proc_profile_kernel* profile = &profile_info.info[p->profiling_index];
+		for (; i < profile_info.count; i++) {
+			struct proc_profile_kernel* profile = &profile_info.info[i];
 			ps->inuse[i] = 1;
 			ps->pid[i] = profile->pid;
 			ps->ticks[i] = profile->num_ticks;
@@ -592,17 +588,21 @@ int getpinfo(struct pstat* ps) {
 			ps->end_tick[i] = profile->completion_time;
 			int j =0;
 			for (; j < 16 && profile->name[j]; j++) 
-				ps->name[i][j] = p->name[j];
+				ps->name[i][j] = profile->name[j];
 			ps->name[i][j] = 0;
+
+			ps->count++;
 		}
 		ret = 0;
+
+		cprintf("The output has a count of %d\n", ps->count);
 	}
 	else {
+		cprintf("No profiling is active\n");
 		memset(ps, 0, sizeof(struct pstat));
-		return -1;
+		ret = -1;
 	}
-	release(&ptable.lock);
 	release(&profile_info.lock);
 
-	return 0;
+	return ret;
 }

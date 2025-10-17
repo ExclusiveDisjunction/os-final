@@ -20,9 +20,10 @@ static void spawn(char *prog, char *arg){
 	}
 }
 int main(int argc, char *argv[]){
-	struct pstat ps;
 	int i;
 	int start = uptime();
+	pinfostart();
+	
 	spawn("cpubound", "600000");
 	spawn("cpubound", "600000");
 	spawn("iobound", "40");
@@ -32,15 +33,20 @@ int main(int argc, char *argv[]){
 	for(i = 0; i < NCHILD; i++){
 		wait();
 	}
-	
+
+	struct pstat info;	
 	int end = uptime();
 	int makespan = end - start;
 	
-	if(getpinfo(&ps) < 0){
+	if(getpinfo(&info) < 0){
 		printf(1, "getinfo failed\n");
 		exit();
 	}
-	
+
+	if (info.count > 0) {
+		printf(1, "Count: %d\nFirst row raw: %d %s %d", info.count, info.inuse[0], info.name[0], info.pid[0]);
+	}	
+
 	int total_resp = 0;
 	int resp_cnt = 0;
 	int total_turn = 0;
@@ -52,44 +58,44 @@ int main(int argc, char *argv[]){
 
 	printf(1, "\nFINAL STATS\n");
 	printf(1, "PID\tName           Ticks\tWait\tStart\tFirst\tEnd\t\n");	
-	for(i = 0; i < NPROC; i++){
-		if(ps.inuse[i] && ps.pid[i] > 2){
+	for(i = 0; i < NPROC && i < info.count; i++){
+		if(info.inuse[i] && info.pid[i] > 2){
 			int turnaround;
-			if(ps.end_tick[i] > 0){
-				turnaround = ps.end_tick[i] - ps.start_tick[i];
+			if(info.end_tick[i] > 0){
+				turnaround = info.end_tick[i] - info.start_tick[i];
 			}
 			else{
-				turnaround = end - ps.start_tick[i];
+				turnaround = end - info.start_tick[i];
 			}
 			
 			int response;
-			if(ps.first_run[i] >= 0){
-				response = ps.first_run[i] - ps.start_tick[i];
+			if(info.first_run[i] >= 0){
+				response = info.first_run[i] - info.start_tick[i];
 			}
 			else{
-				response = end - ps.start_tick[i];
+				response = end - info.start_tick[i];
 			}
 		
 			// Perfectionist stuff... Creating a buffer that stores the name to a specific width..
 			memset(name_pretty, ' ', sizeof(char) * 15);
 			int c_i;
-			char* name = ps.name[i];
+			char* name = info.name[i];
 			for(c_i = 0; name[c_i]; c_i++) 
 				name_pretty[c_i] = name[c_i]; 
 
-			printf(1, "%d\t%s\t%d\t%d\t%d\t%d\t%d\n", ps.pid[i], name_pretty, ps.ticks[i], ps.wait_ticks[i], ps.start_tick[i], ps.first_run[i], ps.end_tick[i]);
+			printf(1, "%d\t%s\t%d\t%d\t%d\t%d\t%d\n", info.pid[i], name_pretty, info.ticks[i], info.wait_ticks[i], info.start_tick[i], info.first_run[i], info.end_tick[i]);
 			
-			if(ps.end_tick[i] > 0){
+			if(info.end_tick[i] > 0){
 				total_turn += turnaround;
 				turn_cnt++;
 			}
 			
-			if(ps.first_run[i] >= 0){
+			if(info.first_run[i] >= 0){
 				total_resp += response;
 				resp_cnt++;
 			}
 			
-			busy_ticks += ps.ticks[i];
+			busy_ticks += info.ticks[i];
 		}
 	}
 	

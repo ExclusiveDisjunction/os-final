@@ -124,20 +124,14 @@ int sys_getpinfo(void) {
 	struct pstat* ps;
 	if (argptr(0, (void*)&ps, sizeof(struct pstat)) < 0)
 		return -1;
-	return getpinfo(ps);
+
+	int result = getpinfo(ps);
+	cprintf("KERNEL: Obtained count %d\n", ps->count);
+	profile_release();
+	return result;
 }
 
-int sys_pinfostart(void) {
-	int count;
-	if (argptr(0, (void*)&count, sizeof(int)) < 0)
-		return -1;
-	
-	panic("Unimplemented");
-	return 1;
-}
-int sys_pinfoend(void) {
-	
-	panic("Unimplemented");
-	return 1;
+int sys_pinfostart(void) {	
+	return profile_setup();
 }
 
