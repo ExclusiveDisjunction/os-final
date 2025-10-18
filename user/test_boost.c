@@ -1,3 +1,6 @@
+#include "types.h"
+#include "user.h"
+
 int main() {
     int pid1 = fork();
     if (pid1 == 0) {
