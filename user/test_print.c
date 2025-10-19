@@ -10,6 +10,6 @@ int main(int argc, char** argv) {
         for(i=1; i < argc; i++){
             printf(1, "%s ", argv[i]);
         }
-        printf(1, "\n");
+        printf(1, "");
     }
 }

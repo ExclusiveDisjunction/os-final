@@ -76,12 +76,11 @@ trap(struct trapframe *tf)
 
     // Update wait times for all RUNNABLE processes (anti-starve tracking, aka boosting)
     acquire(&ptable.lock);
-    for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {      
+    for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
       if (p->state == RUNNABLE) {
         if (p->priority >= 0 && p->priority < QUEUE_NUM){
           p->p_wait_ticks[p->priority]++;
         }
-        
 
         // Check for boost (Rule: waited 10x slice)
         if (p->p_wait_ticks[p->priority] >= boost_wait_threshold[p->priority] &&
@@ -90,7 +89,7 @@ trap(struct trapframe *tf)
           p->p_wait_ticks[p->priority] = 0;
           p->timeslice_left = queue_time_slice[p->priority];
           p->rr_slice_left = rr_slice[p->priority];
-          cprintf("%s got boosted up one level", p->name);
+          // cprintf("\n%s, pid=%d got boosted up one level\n", p->name, p->pid); // Boosting debug statement
         }
       }
     }

@@ -3,6 +3,7 @@
 
 int main() {
     while (1) {
-        sleep(100);  // sleep for a while
+        printf(1, "sleep");
+        sleep(10);  // sleep for a while
     }
 }
