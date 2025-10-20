@@ -64,3 +64,6 @@ kernel/bootblock
 kernel/kernel
 tools/mkfs
 user/bin/
+*.swp
+
+./kernel/vectors.S

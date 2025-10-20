@@ -23,12 +23,10 @@
 #define SYS_sbrk   19
 #define SYS_sleep  20
 #define SYS_uptime 21
-#define SYS_firstpart  22
-#define SYS_secondpart 23
-#define SYS_thirdpart  24
-#define SYS_shutdown 25
-#define SYS_ps 26
-#define SYS_getpinfo 27
-#define SYS_boostproc 28
+#define SYS_shutdown 22
+#define SYS_ps 23
+#define SYS_getpinfo 24
+#define SYS_pinfostart 25
+#define SYS_boostproc 26
 
 #endif // _SYSCALL_H_

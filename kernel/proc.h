@@ -7,6 +7,7 @@
 #include "x86.h"    
 
 #include "spinlock.h"
+#include "spinlock.h"
 #include "queue.h"
 
 // Segments in proc->gdt.
@@ -108,6 +109,8 @@ struct proc {
   int p_wait_ticks[4]; // Ticks waited at each priority
   int timeslice_left; // Remaining ticks in current time slice
   int rr_slice_left; // Remaining ticks in current RR turn
+
+  int profiling_index;         // The index in the global profile info. If no such index exists, it will be -1. Note, it may not always be valid.
 };
 
 // Global process table
@@ -125,6 +128,29 @@ struct ptable_t {
 
 extern struct ptable_t ptable;   // declaration only
 
+// Process profiling state
+struct proc_profile_kernel {
+  int pid;
+  int parent_pid;
+  char name[16];
+
+  int num_ticks;
+  int wait_ticks;
+  int creation_time;
+  int first_run_time;
+  int completion_time;
+};
+
+struct profile_info_struct {
+  struct spinlock lock;
+  struct proc_profile_kernel info[NPROC];
+  int count;
+  short active;
+};
+
+// Process profiling related functions
+int profile_setup();
+int profile_release();
 
 // Process memory is laid out contiguously, low addresses first:
 //   text

@@ -17,16 +17,16 @@ USER_PROGS := \
 	usertests\
 	wc\
 	zombie\
-	partone-test\
-	parttwo-test\
-	partthree-test\
-	projectone-test\
 	hog\
 	sleeper\
 	test_boost\
 	test_mlfq\
 	test_print\
-	ps
+	ps\
+	cpubound\
+	iobound\
+	mixed\
+	benchmark
 
 USER_PROGS := $(addprefix user/, $(USER_PROGS))
 

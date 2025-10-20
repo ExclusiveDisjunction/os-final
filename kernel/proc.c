@@ -9,7 +9,7 @@
 #include "queue.h"
 
 struct ptable_t ptable;
-
+struct profile_info_struct profile_info;
 
 static struct proc *initproc;
 
@@ -19,6 +19,31 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+int profile_setup() {
+  acquire(&profile_info.lock);
+
+  if (profile_info.active) //Already opened
+    return -1;
+
+  memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
+  profile_info.count = 0;
+  profile_info.active = 1;
+
+  release(&profile_info.lock);
+  return 0;
+}
+int profile_release() {
+  acquire(&profile_info.lock);
+  if (!profile_info.active) //Already released
+    return -1;
+
+  memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
+  profile_info.count = 0;
+  profile_info.active = 0;
+
+  release(&profile_info.lock);
+  return 0;
+}
 
 // Total time slices per priority level (time before demotion)
 const int queue_time_slice[QUEUE_NUM] = {
@@ -52,7 +77,7 @@ static struct proc* dequeue_proc(int qidx) {
   struct proc *p = dequeue(&ptable.queues[qidx]);
   if (p) p->in_queue = 0;
   return p;
-}
+
 
 void
 pinit(void)
@@ -62,7 +87,11 @@ pinit(void)
   for (int i = 0; i < QUEUE_NUM; i++) {
     initializeQueue(&ptable.queues[i], NPROC, queue_quantum[i]);
   }
- 
+  
+  initlock(&profile_info.lock, "profile_info");  
+  profile_info.count = 0;
+  profile_info.active = 0;
+  memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
 }
 
 // Look in the process table for an UNUSED proc.
@@ -107,12 +136,32 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  
+  // Now, if profiling is active, and there is space to store, we will store a profiling information session.
+  acquire(&profile_info.lock);
+  if (profile_info.active && profile_info.count + 1 < NPROC) {
+    struct proc_profile_kernel* new_info = &profile_info.info[profile_info.count];
+    p->profiling_index = profile_info.count; 
+  
+    profile_info.count++;
 
-  p->num_ticks = 0;
-  p->wait_ticks = 0;
-  p->creation_time = ticks;
-  p->first_run_time = -1;
-  p->completion_time = 0;
+    new_info->pid = p->pid;
+    new_info->parent_pid = p->parent ? p->parent->pid : 0;
+
+    int j =0;
+    for (; j < 16; j++) 
+      new_info->name[j] = p->name[j];
+    new_info->name[j] = 0;
+
+    new_info->num_ticks = 0;
+    new_info->wait_ticks = 0;
+    new_info->creation_time = ticks;
+    new_info->first_run_time = -1;
+    new_info->completion_time = 0; 
+  }
+  else { p->profiling_index = -1; }
+
+  release(&profile_info.lock);
   
   p->priority = HIGHEST_PRIORITY;
   // Initialize accumlated and wait ticks arrays to 0
@@ -268,6 +317,15 @@ exit(void)
 
   // Jump into the scheduler, never to return.
   proc->state = ZOMBIE;
+  
+  acquire(&profile_info.lock);
+  if (profile_info.active) {
+    if (proc->profiling_index >= 0 && proc->profiling_index < profile_info.count) {
+         profile_info.info[proc->profiling_index].completion_time = ticks;  
+    }
+  }
+  release(&profile_info.lock);
+
   sched();
   panic("zombie exit");
 }
@@ -328,14 +386,49 @@ scheduler(void)
   struct proc *p;
   int q; // target level queue
 
-  for(;;){
+  while (1) {
     // Enable interrupts on this processor.
     sti();
     acquire(&ptable.lock);
 
-    // Update wait ticks
-    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-      if (p->state == RUNNABLE) p->wait_ticks++;
+    acquire(&profile_info.lock);
+    if (profile_info.active) {  
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+         if (p->state == RUNNABLE && p->profiling_index >= 0 && p->profiling_index < profile_info.count)
+          profile_info.info[p->profiling_index].wait_ticks++;
+      }
+    }
+    release(&profile_info.lock);
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if(p->state != RUNNABLE)
+        continue;
+
+      // Mark first run, if applicable
+      acquire(&profile_info.lock);
+      if (profile_info.active && p->profiling_index >= 0 && p->profiling_index < profile_info.count) {
+        struct proc_profile_kernel* target_info = &profile_info.info[p->profiling_index];
+        if (target_info->first_run_time < 0)
+          target_info->first_run_time = ticks;
+
+        target_info->num_ticks++;
+      }
+      release(&profile_info.lock);
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&cpu->scheduler, proc->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      proc = 0;
     }
     release(&ptable.lock);
 
@@ -598,27 +691,35 @@ void ps(void) {
 int getpinfo(struct pstat* ps) {
 	if (ps == 0) 
 		return -1;
+	int ret;
 
-	acquire(&ptable.lock);
-	struct proc* p;
-	int i = 0;
-	for (p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++) {
-		if (p->state == UNUSED) {
-			ps->inuse[i] = 0;
-			continue;
+	acquire(&profile_info.lock);	
+	if (profile_info.active && profile_info.count) {
+		int i = 0;
+		for (; i < profile_info.count; i++) {
+			struct proc_profile_kernel* profile = &profile_info.info[i];
+			ps->inuse[i] = 1;
+			ps->pid[i] = profile->pid;
+			ps->ticks[i] = profile->num_ticks;
+			ps->wait_ticks[i] = profile->wait_ticks;
+			ps->start_tick[i] = profile->creation_time;
+			ps->first_run[i] = profile->first_run_time;
+			ps->end_tick[i] = profile->completion_time;
+			int j =0;
+			for (; j < 16 && profile->name[j]; j++) 
+				ps->name[i][j] = profile->name[j];
+
+			ps->name[i][j] = 0;
+			
+			ps->count++;
 		}
-		ps->inuse[i] = 1;
-		ps->pid[i] = p->pid;
-		ps->ticks[i] = p->num_ticks;
-		ps->wait_ticks[i] = p->wait_ticks;
-		ps->start_tick[i] = p->creation_time;
-		ps->first_run[i] = p->first_run_time;
-		ps->end_tick[i] = p->completion_time;
-		int j =0;
-		for (; j < 16 && p->name[j]; j++) 
-			ps->name[i][j] = p->name[j];
-		ps->name[i][j] = 0;
+		ret = 0;
 	}
-	release(&ptable.lock);
-	return 0;
+	else {
+		memset(ps, 0, sizeof(struct pstat));
+		ret = -1;
+	}
+	release(&profile_info.lock);
+
+	return ret;
 }
