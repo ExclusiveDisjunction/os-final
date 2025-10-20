@@ -6,7 +6,7 @@ int main() {
     if (pid1 == 0) {
         char *argv[] = { "hog", 0 };
         int ret = exec("hog", argv);
-        printf("hog returned code=%d", ret);   
+        printf(1, "hog returned code=%d", ret);   
         exit();
     }
 
@@ -14,7 +14,7 @@ int main() {
     if (pid2 == 0) {
         char *argv[] = { "sleeper", 0 };
         int ret = exec("sleeper", argv);
-        printf("sleeper returned code=%d", ret);  
+        printf(1, "sleeper returned code=%d", ret);  
         exit();
     }
 

@@ -8,7 +8,7 @@ int main(int argc, char** argv) {
     while(1){
         int i;
         for(i=1; i < argc; i++){
-            printf(1, "%s ", argv[i]);
+            printf(1, "%s\n ", argv[i]);
         }
         printf(1, "");
     }
