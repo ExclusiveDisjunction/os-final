@@ -23,8 +23,10 @@ int profile_setup()
 {
   acquire(&profile_info.lock);
 
-  if (profile_info.active) // Already opened
+  if (profile_info.active) { // Already opened
+    release(&profile_info.lock);
     return -1;
+  }
 
   memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
   profile_info.count = 0;
@@ -36,8 +38,10 @@ int profile_setup()
 int profile_release()
 {
   acquire(&profile_info.lock);
-  if (!profile_info.active) // Already released
+  if (!profile_info.active) { // Already released
+    release(&profile_info.lock);
     return -1;
+  }
 
   memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
   profile_info.count = 0;
@@ -84,19 +88,19 @@ static struct proc *dequeue_proc(int qidx)
   return p;
 }
 
-void pinit(void)
-{
+void pinit(void) {
   initlock(&ptable.lock, "ptable");
+  initlock(&profile_info.lock, "profile_info");
 
-  for (int i = 0; i < QUEUE_NUM; i++)
-  {
+  for (int i = 0; i < QUEUE_NUM; i++) {
     initializeQueue(&ptable.queues[i], NPROC, queue_quantum[i]);
   }
 
-  initlock(&profile_info.lock, "profile_info");
+  acquire(&profile_info.lock);
   profile_info.count = 0;
   profile_info.active = 0;
   memset(profile_info.info, 0, sizeof(struct proc_profile_kernel) * NPROC);
+  release(&profile_info.lock);
 }
 
 // Look in the process table for an UNUSED proc.
@@ -113,13 +117,13 @@ allocproc(void)
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if (p->state == UNUSED)
       goto found;
+
   release(&ptable.lock);
   return 0;
 
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
-  release(&ptable.lock);
 
   // Allocate kernel stack if possible.
   if ((p->kstack = kalloc()) == 0)
@@ -145,8 +149,7 @@ found:
 
   // Now, if profiling is active, and there is space to store, we will store a profiling information session.
   acquire(&profile_info.lock);
-  if (profile_info.active && profile_info.count + 1 < NPROC)
-  {
+  if (profile_info.active && profile_info.count + 1 < NPROC) {
     struct proc_profile_kernel *new_info = &profile_info.info[profile_info.count];
     p->profiling_index = profile_info.count;
 
@@ -167,9 +170,7 @@ found:
     new_info->completion_time = 0;
   }
   else
-  {
     p->profiling_index = -1;
-  }
 
   release(&profile_info.lock);
 
@@ -184,6 +185,8 @@ found:
   p->timeslice_left = queue_time_slice[HIGHEST_PRIORITY];
   p->rr_slice_left = rr_slice[HIGHEST_PRIORITY];
   p->in_queue = 0;
+
+  release(&ptable.lock);
   return p;
 }
 
@@ -423,7 +426,6 @@ void scheduler(void)
     release(&profile_info.lock);
 
     // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
       if (p->state != RUNNABLE)
@@ -454,9 +456,7 @@ void scheduler(void)
       // It should have changed its p->state before coming back.
       proc = 0;
     }
-    release(&ptable.lock);
-
-    acquire(&ptable.lock);
+    
     // Pick highest non-empty queue (Rule 1)
     for (q = HIGHEST_PRIORITY; q >= LOWEST_PRIORITY; q--)
     {

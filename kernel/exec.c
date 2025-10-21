@@ -86,7 +86,7 @@ exec(char *path, char **argv)
   // Save the program name in the profiling, if active.
   acquire(&profile_info.lock);
   if (profile_info.active && proc->profiling_index >= 0 && proc->profiling_index < profile_info.count) 
-	safestrcpy(profile_info.info[proc->profiling_index].name, last, sizeof(proc->name)); 
+	  safestrcpy(profile_info.info[proc->profiling_index].name, last, sizeof(proc->name)); 
 
   release(&profile_info.lock);
 
