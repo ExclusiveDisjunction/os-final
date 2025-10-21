@@ -103,6 +103,35 @@ void pinit(void) {
   release(&profile_info.lock);
 }
 
+// Register the process for profiling, if profiling is active.
+void register_for_profiling(struct proc* p) {
+  acquire(&profile_info.lock);
+  if (profile_info.active && profile_info.count + 1 < NPROC) {
+    struct proc_profile_kernel *new_info = &profile_info.info[profile_info.count];
+    p->profiling_index = profile_info.count;
+
+    profile_info.count++;
+
+    new_info->pid = p->pid;
+    new_info->parent_pid = p->parent ? p->parent->pid : 0;
+
+    int j = 0;
+    for (; j < 16; j++)
+      new_info->name[j] = p->name[j];
+    new_info->name[j] = 0;
+
+    new_info->num_ticks = 0;
+    new_info->wait_ticks = 0;
+    new_info->creation_time = ticks;
+    new_info->first_run_time = -1;
+    new_info->completion_time = 0;
+  }
+  else
+    p->profiling_index = -1;
+
+  release(&profile_info.lock);
+}
+
 // Look in the process table for an UNUSED proc.
 // If found, change state to EMBRYO and initialize
 // state required to run in the kernel.
@@ -148,31 +177,7 @@ found:
   p->context->eip = (uint)forkret;
 
   // Now, if profiling is active, and there is space to store, we will store a profiling information session.
-  acquire(&profile_info.lock);
-  if (profile_info.active && profile_info.count + 1 < NPROC) {
-    struct proc_profile_kernel *new_info = &profile_info.info[profile_info.count];
-    p->profiling_index = profile_info.count;
-
-    profile_info.count++;
-
-    new_info->pid = p->pid;
-    new_info->parent_pid = p->parent ? p->parent->pid : 0;
-
-    int j = 0;
-    for (; j < 16; j++)
-      new_info->name[j] = p->name[j];
-    new_info->name[j] = 0;
-
-    new_info->num_ticks = 0;
-    new_info->wait_ticks = 0;
-    new_info->creation_time = ticks;
-    new_info->first_run_time = -1;
-    new_info->completion_time = 0;
-  }
-  else
-    p->profiling_index = -1;
-
-  release(&profile_info.lock);
+  register_for_profiling(p);
 
   p->priority = HIGHEST_PRIORITY;
   // Initialize accumlated and wait ticks arrays to 0
@@ -424,39 +429,7 @@ void scheduler(void)
       }
     }
     release(&profile_info.lock);
-
-    // Loop over process table looking for process to run.
-    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    {
-      if (p->state != RUNNABLE)
-        continue;
-
-      // Mark first run, if applicable
-      acquire(&profile_info.lock);
-      if (profile_info.active && p->profiling_index >= 0 && p->profiling_index < profile_info.count)
-      {
-        struct proc_profile_kernel *target_info = &profile_info.info[p->profiling_index];
-        if (target_info->first_run_time < 0)
-          target_info->first_run_time = ticks;
-
-        target_info->num_ticks++;
-      }
-      release(&profile_info.lock);
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
-    }
-    
+ 
     // Pick highest non-empty queue (Rule 1)
     for (q = HIGHEST_PRIORITY; q >= LOWEST_PRIORITY; q--)
     {
@@ -479,15 +452,18 @@ void scheduler(void)
       continue;
     }
 
-    // cprintf("scheduler: switching to pid %d name=%s prio=%d timeslice=%d rr=%d\n",
-    // p->pid, p->name, p->priority, p->timeslice_left, p->rr_slice_left);
-
-    // set the first time process was run
-    if (p->first_run_time < 0)
+    // Mark first run, if applicable
+    acquire(&profile_info.lock);
+    if (profile_info.active && p->profiling_index >= 0 && p->profiling_index < profile_info.count)
     {
-      p->first_run_time = ticks;
-    }
+      struct proc_profile_kernel *target_info = &profile_info.info[p->profiling_index];
+      if (target_info->first_run_time < 0)
+        target_info->first_run_time = ticks;
 
+      target_info->num_ticks++;
+    }
+    release(&profile_info.lock);
+    
     proc = p;
     switchuvm(p);
     p->state = RUNNING;
@@ -637,6 +613,14 @@ int kill(int pid)
     if (p->pid == pid)
     {
       p->killed = 1;
+
+      // Register the end time
+      acquire(&profile_info.lock);
+      if (profile_info.active && p->profiling_index >= 0 && p->profiling_index < NPROC) 
+         profile_info.info[p->profiling_index].completion_time = ticks;
+      p->profiling_index = -1;
+      release(&profile_info.lock);
+
       // Wake process from sleep if necessary.
       if (p->state == SLEEPING)
         p->state = RUNNABLE;

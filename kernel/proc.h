@@ -97,12 +97,6 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   
-  int num_ticks;
-  int wait_ticks;
-  int creation_time;
-  int first_run_time;
-  int completion_time;
-
   int in_queue; // If this process is already in another queue
   int priority; // Current priority level (0-3)
   int ticks[4]; // Ticks accumulated at each priority

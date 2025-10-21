@@ -62,7 +62,6 @@ trap(struct trapframe *tf)
     // We'll let the unconditional preemption later in trap() handle the actual context switch.
     if (proc) {
       // accumulate CPU used
-      proc->num_ticks++;
       if (proc->priority >= 0 && proc->priority < QUEUE_NUM) {
         proc->ticks[proc->priority]++;
       }
