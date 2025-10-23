@@ -146,6 +146,8 @@ struct profile_info_struct {
 int profile_setup();
 int profile_release();
 
+int boost_current_proc(void);
+
 // Process memory is laid out contiguously, low addresses first:
 //   text
 //   original data and bss

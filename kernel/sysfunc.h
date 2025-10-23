@@ -30,5 +30,6 @@ int sys_shutdown(void);
 int sys_ps(void);
 int sys_getpinfo(void);
 int sys_pinfostart(void);
+int sys_boostproc(void);
 
 #endif // _SYSFUNC_H_

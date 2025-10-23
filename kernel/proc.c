@@ -103,6 +103,23 @@ void pinit(void) {
   release(&profile_info.lock);
 }
 
+int boost_current_proc(void) {
+	if (proc->priority >= 0 && proc->priority < HIGHEST_PRIORITY) {
+		acquire(&ptable.lock);
+
+		proc->priority++;
+		proc->p_wait_ticks[proc->priority] = 0;
+		proc->timeslice_left = queue_time_slice[proc->priority];
+		proc->rr_slice_left = rr_slice[proc->priority];
+
+		release(&ptable.lock);
+		return 0;
+	}
+	else {
+		return -1;
+	}	
+}
+
 // Register the process for profiling, if profiling is active.
 void register_for_profiling(struct proc* p) {
   acquire(&profile_info.lock);

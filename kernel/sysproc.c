@@ -134,3 +134,6 @@ int sys_pinfostart(void) {
 	return profile_setup();
 }
 
+int sys_boostproc(void) {
+	return boost_current_proc();
+}
