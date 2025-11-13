@@ -622,3 +622,12 @@ int getpinfo(struct pstat* ps) {
 	release(&ptable.lock);
 	return 0;
 }
+
+int boostproc(void){
+	acquire(&ptable.lock);
+  if(proc->priority < 3){
+    proc->priority++;
+  }
+	release(&ptable.lock);
+  return 0;
+}

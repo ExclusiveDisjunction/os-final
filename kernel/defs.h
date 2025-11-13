@@ -112,6 +112,7 @@ void            wakeup(void*);
 void            yield(void);
 void            ps(void);
 int             getpinfo(struct pstat*);
+int             boostproc(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

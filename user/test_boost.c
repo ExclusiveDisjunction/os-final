@@ -17,6 +17,5 @@ int main() {
         printf(1, "sleeper returned code=%d", ret);  
         exit();
     }
-
     wait();
 }

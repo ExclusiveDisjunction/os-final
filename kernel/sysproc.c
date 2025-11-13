@@ -126,3 +126,8 @@ int sys_getpinfo(void) {
 		return -1;
 	return getpinfo(ps);
 }
+
+int sys_boostproc(void){
+  boostproc();
+  return 0;
+}

@@ -34,6 +34,7 @@ int thirdpart(void);
 int shutdown(void);
 int ps(void);
 int getpinfo(struct pstat*);
+int boostproc(void);
 
 // user library functions (ulib.c)
 int stat(char*, struct stat*);

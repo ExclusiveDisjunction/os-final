@@ -5,6 +5,7 @@
 int main(){
     while(1){
         printf(1, "hog\n");
+        boostproc();
     }
     return 0;
 }
