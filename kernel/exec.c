@@ -5,6 +5,9 @@
 #include "defs.h"
 #include "x86.h"
 #include "elf.h"
+#include "spinlock.h"
+
+extern struct profile_info_struct profile_info;
 
 int
 exec(char *path, char **argv)
@@ -32,7 +35,7 @@ exec(char *path, char **argv)
     goto bad;
 
   // Load program into memory.
-  sz = 0;
+  sz = PGSIZE;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;
@@ -79,6 +82,13 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(proc->name, last, sizeof(proc->name));
+
+  // Save the program name in the profiling, if active.
+  acquire(&profile_info.lock);
+  if (profile_info.active && proc->profiling_index >= 0 && proc->profiling_index < profile_info.count) 
+	  safestrcpy(profile_info.info[proc->profiling_index].name, last, sizeof(proc->name)); 
+
+  release(&profile_info.lock);
 
   // Commit to the user image.
   oldpgdir = proc->pgdir;

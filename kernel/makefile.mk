@@ -16,6 +16,7 @@ KERNEL_OBJECTS := \
 	picirq.o\
 	pipe.o\
 	proc.o\
+	queue.o\
 	spinlock.o\
 	string.o\
 	swtch.o\
@@ -143,4 +144,6 @@ kernel/%.d: kernel/%.c
 kernel/%.d: kernel/%.S
 	$(AS) $(CPPFLAGS) $(KERNEL_CPPFLAGS) $(CFLAGS) $(KERNEL_CFLAGS) \
 		-M -MG $< -MF $@ -MT $@ -MT $(<:.S=.o)
+		
+
 

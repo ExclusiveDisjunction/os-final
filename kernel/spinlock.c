@@ -8,8 +8,7 @@
 #include "proc.h"
 #include "spinlock.h"
 
-void
-initlock(struct spinlock *lk, char *name)
+void initlock(struct spinlock *lk, char *name)
 {
   lk->name = name;
   lk->locked = 0;
@@ -20,12 +19,11 @@ initlock(struct spinlock *lk, char *name)
 // Loops (spins) until the lock is acquired.
 // Holding a lock for a long time may cause
 // other CPUs to waste time spinning to acquire it.
-void
-acquire(struct spinlock *lk)
+void acquire(struct spinlock *lk)
 {
   pushcli(); // disable interrupts to avoid deadlock.
   if(holding(lk))
-    panic("acquire");
+    panic(lk->name);
 
   // The xchg is atomic.
   // It also serializes, so that reads after acquire are not
