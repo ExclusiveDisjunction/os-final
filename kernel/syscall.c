@@ -20,7 +20,11 @@ extern int succ_syscalls_count;
 int
 fetchint(struct proc *p, uint addr, int *ip)
 {
-  if(addr >= p->sz || addr+4 > p->sz)
+  if(p->pid != 1 && addr < PGSIZE) //No addresses in null page (check if its kernel though)
+	return -1;
+  if(addr + sizeof(int) < addr)  //check for out of bounds
+	return -1;
+  if(addr >= p->sz || addr + sizeof(int) > p->sz)
     return -1;
   *ip = *(int*)(addr);
   return 0;
@@ -34,13 +38,16 @@ fetchstr(struct proc *p, uint addr, char **pp)
 {
   char *s, *ep;
 
+  if(p->pid != 1 && addr < PGSIZE)  //No address in null page (check if kernel)
+	  return -1;
   if(addr >= p->sz)
     return -1;
   *pp = (char*)addr;
   ep = (char*)p->sz;
-  for(s = *pp; s < ep; s++)
+  for(s = *pp; s < ep; s++){
     if(*s == 0)
       return s - *pp;
+  }
   return -1;
 }
 
@@ -61,6 +68,10 @@ argptr(int n, char **pp, int size)
   
   if(argint(n, &i) < 0)
     return -1;
+  if((uint)i <= PGSIZE)  // address cant be in null page
+	return 1;
+  if((uint)i + size < (uint)i)  //check for out of bounds
+	return -1;
   if((uint)i >= proc->sz || (uint)i+size > proc->sz)
     return -1;
   *pp = (char*)i;
